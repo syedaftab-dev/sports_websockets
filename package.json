@@ -1,7 +1,11 @@
 {
   "dependencies": {
+    "@neondatabase/serverless": "^1.1.0",
+    "dotenv": "^17.4.2",
+    "drizzle-orm": "^0.45.2",
     "express": "^5.2.1",
-    "init": "^0.1.2"
+    "init": "^0.1.2",
+    "ws": "^8.20.0"
   },
   "name": "sportz",
   "version": "1.0.0",
@@ -9,10 +13,17 @@
   "main": "index.js",
   "scripts": {
     "dev": "node --watch src/index.js",
-    "start": "node src/index.js"
+    "start": "node src/index.js",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:studio":"drizzle-kit studio",
+    "demo" : "node src/crud-demo.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "module"
+  "type": "module",
+  "devDependencies": {
+    "drizzle-kit": "^0.31.10"
+  }
 }
