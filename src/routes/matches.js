@@ -13,7 +13,7 @@ matchRouter.get('/',async (req,res)=>{
     if(!parsed.success){
         return res.status(400).json({
             error: "Invalid query",
-            details: JSON.stringify(parsed.error)
+            details: JSON.stringify(parsed.error.issues)
         })
     }
 
@@ -43,13 +43,13 @@ matchRouter.post('/',async (req,res)=>{
     // apply zod validation to user received data
     const parsed = createMatchSchema.safeParse(req.body);
 
-    const { data: { startTime,endTime, homeScore, awayScore }} = parsed;
+    
     // if zod fails send error
     if(!parsed.success){
-        return res.status(400).json({ error: 'Invalid Payload', details: JSON.stringify(parsed.error) })
+        return res.status(400).json({ error: 'Invalid Payload', details: JSON.stringify(parsed.error.issues) })
     }
     // if zod pass
-    
+    const { data: { startTime,endTime, homeScore, awayScore }} = parsed;
     try {
         // insert new match to databse
         const [event] = await db.insert(matches).values({
