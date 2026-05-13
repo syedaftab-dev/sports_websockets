@@ -29,7 +29,7 @@ export const wsArcjet = arcjetKey ?
 
 // for rest api
 export function securityMiddleware(){
-    return async (req,res,nex)=>{
+    return async (req,res,next)=>{
         if(!httpArcjet)return next();
 
 
