@@ -1,8 +1,10 @@
 import { WebSocket, WebSocketServer } from "ws"
+import { wsArcjet } from "../arcjet.js";
+import { codec } from "zod";
 
 // a helper function to check client is open and stringify raw data
-function sendJson(socket, payload){
-    if(socket.readyState !== WebSocket.OPEN){
+function sendJson(socket, payload) {
+    if (socket.readyState !== WebSocket.OPEN) {
         return
     }
 
@@ -10,44 +12,77 @@ function sendJson(socket, payload){
 }
 
 // broadcast
-function broadCast(wss, payload){
-    for(const client of wss.clients){
-        if(client.readyState !== WebSocket.OPEN){
+function broadCast(wss, payload) {
+    for (const client of wss.clients) {
+        if (client.readyState !== WebSocket.OPEN) {
             continue;
         }
         client.send(JSON.stringify(payload))
     }
 }
 
-export function attachWebSocketServer(server){
+export function attachWebSocketServer(server) {
     const wss = new WebSocketServer({
         server, // same server as express to use save server
         // api or endpoint, only for hitted by websockets others will be handled by express  
         path: '/ws',
-        maxPayload: 1024*1024 // max size of incoming payload == 1MB
+        maxPayload: 1024 * 1024 // max size of incoming payload == 1MB
     })
-    
-     wss.on('connection',(socket)=>{
-        socket.isAlive = true;
-        socket.on('pong',()=>{ socket.isAlive = true })
-        
-        sendJson(socket, {type : 'welcome'});
 
-        socket.on('error', console.error)
-        })
-        const interval = setInterval(()=>{
-            wss.clients.forEach((ws)=>{
-                if(ws.isAlive === false)return ws.terminate();
-                ws.isAlive = false;
-                ws.ping();
-            })
-        },3000);
+    server.on('upgrade', async (req, socket, head) => {
+        const { pathname } = new URL(req.url, `http://${req.headers.host}`);
 
-        wss.on('close',()=> clearInterval(interval))
-        // clean up function or broadcast to everyone
-        function broadcastMatchCreated(match){
-            broadCast(wss, {type: "match_created", data: match })
+        if (pathname !== '/ws') {
+            return;
         }
 
-        return { broadcastMatchCreated }
+        if (wsArcjet) {
+            try {
+                const decision = await wsArcjet.protect(req);
+
+                if (decision.isDenied()) {
+                    if (decision.reason.isRateLimit()) {
+                        socket.write('HTTP/1.1 429 Too Many Requests\r\n\r\n');
+                    } else {
+                        socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
+                    }
+                    socket.destroy();
+                    return;
+                }
+            } catch (e) {
+                console.error('WS upgrade protection error', e);
+                socket.write('HTTP/1.1 500 Internal Server Error\r\n\r\n');
+                socket.destroy();
+                return;
+            }
+        }
+
+        wss.handleUpgrade(req, socket, head, (ws) => {
+            wss.emit('connection', ws, req);
+        });
+    });
+
+    wss.on('connection', async (socket, req) => {
+        socket.isAlive = true;
+        socket.on('pong', () => { socket.isAlive = true })
+
+        sendJson(socket, { type: 'welcome' });
+
+        socket.on('error', console.error)
+    })
+    const interval = setInterval(() => {
+        wss.clients.forEach((ws) => {
+            if (ws.isAlive === false) return ws.terminate();
+            ws.isAlive = false;
+            ws.ping();
+        })
+    }, 3000);
+
+    wss.on('close', () => clearInterval(interval))
+    // clean up function or broadcast to everyone
+    function broadcastMatchCreated(match) {
+        broadCast(wss, { type: "match_created", data: match })
+    }
+
+    return { broadcastMatchCreated }
 }
