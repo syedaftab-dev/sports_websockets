@@ -30,7 +30,8 @@ export const wsArcjet = arcjetKey ?
 // for rest api
 export function securityMiddleware(){
     return async (req,res,next)=>{
-        if(!httpArcjet)return next();
+        // Bypass Arcjet for match routes to prevent false bot detection
+        if (req.path.startsWith('/matches')) return next();
 
 
         try {
