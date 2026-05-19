@@ -146,39 +146,4 @@ Visit `http://localhost:3000` to view the live dashboard!
 
 ---
 
-## 🌐 Railway Deployment Guide (Always-On Server)
-
-To deploy the entire Sportz stack on **Railway.app** for blazing-fast performance that never sleeps:
-
-### 1. Backend & Worker (Single Service)
-We use the custom launcher script (`backend/src/launcher.js`) to run both the Express API and the background Live Match Poller worker concurrently inside a single Railway service container, saving you resource hours.
-
-* Log in to **[Railway.app](https://railway.app)**.
-* Click **New Project** ➜ **Deploy from GitHub repository**.
-* Choose your repository.
-* Once the service is created, go to **Settings** ➜ **General**:
-  * Set **Root Directory** to `/backend`.
-* Go to **Variables** and add the variables from your `.env`:
-  * `PORT` = `8000` (Railway will automatically map public traffic to this port)
-  * `DATABASE_URL` = your Neon database connection string
-  * `GROQ_API_KEY` = your Groq API key
-  * `API_SPORTS_KEY` = your SportDB API key
-  * `REDIS_URL` = your Upstash Redis URL (optional)
-  * `ARCJET_KEY` = your Arcjet API key
-  * `ARCJET_ENV` = `production`
-* Railway will automatically run the `npm run start` script (which triggers the concurrent launcher) and generate a public HTTPS domain.
-
-### 2. Frontend React Client
-Deploy the React frontend on Railway as a static service, or deploy it on **Vercel** for 100% free hosting.
-
-To deploy on Railway:
-* In the same Railway project, click **New** ➜ **GitHub Repo** ➜ Choose the same repository.
-* Go to **Settings** ➜ **General**:
-  * Set **Root Directory** to `/frontend`.
-* Go to **Variables** and add:
-  * `VITE_API_URL` = `https://your-backend-service.up.railway.app` (your generated Railway backend URL)
-  * `VITE_WS_URL` = `wss://your-backend-service.up.railway.app/ws` (your generated Railway backend WebSocket URL)
-* Railway will automatically build and serve the static Vite bundle on a separate domain.
-
-
 
