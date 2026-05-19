@@ -56,8 +56,8 @@ export async function fetchLiveEvents() {
         startTime,
         endTime,
         status,
-        homeScore: parseInt(match.homeScore) || 0,
-        awayScore: parseInt(match.awayScore) || 0,
+        homeScore: match.homeScore ? String(match.homeScore) : '0',
+        awayScore: match.awayScore ? String(match.awayScore) : '0',
       };
     });
   } catch (err) {
