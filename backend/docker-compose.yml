@@ -1,0 +1,20 @@
+# Docker Compose for backend and worker (Neon DB & Upstash Redis)
+
+services:
+  backend:
+    build: .
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    # No local DB; uses Neon via DATABASE_URL
+    # No local Redis; uses Upstash via REDIS_URL
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    env_file:
+      - .env
+    command: node workers/liveMatchWorker.js
+    # Worker runs independently; depends only on external services
