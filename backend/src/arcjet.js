@@ -21,6 +21,13 @@ export function securityMiddleware() {
     return async (req, res, next) => {
         if(!httpArcjet) return next();
 
+        // Bypass protection for internal worker and loopback requests
+        const ip = req.ip || req.socket.remoteAddress || "";
+        const isLoopback = ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
+        if (isLoopback || req.headers['x-trusted-worker'] === 'true') {
+            return next();
+        }
+
         try {
             const decision = await httpArcjet.protect(req);
 

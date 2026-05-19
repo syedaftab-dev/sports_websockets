@@ -9,6 +9,9 @@ import { generateCommentary } from "../services/aiCommentaryService.js";
 
 const API_URL = process.env.API_URL || "http://127.0.0.1:8000";
 
+// Add header to identify worker requests to bypass rate-limiting
+axios.defaults.headers.common['x-trusted-worker'] = 'true';
+
 // Cache for processed play IDs to prevent duplicates within the current execution session
 const processedPlayIds = new Set();
 function isPlayProcessed(playId) {
