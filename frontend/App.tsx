@@ -191,6 +191,10 @@ const App: React.FC = () => {
             </div>
           </div>
         </section>
+
+        <footer className="text-center py-6 text-xs text-gray-500 font-medium">
+          Note: The data shown here is for demonstration purposes. It uses a background worker, simulated APIs, and WebSockets to showcase real-time score propagation.
+        </footer>
       </div>
     </div>
   );
