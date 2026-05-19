@@ -13,6 +13,7 @@ const PORT = Number(process.env.PORT || 8000);
 const HOST = process.env.HOST || '0.0.0.0';
 
 const app = express();
+app.set('trust proxy', true);
 const server = http.createServer(app);
 
 app.use(cors());
