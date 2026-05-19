@@ -138,7 +138,7 @@ async function processPlay(play, match) {
           sequence: sequence + 1, // Ensure AI commentary is right after the actual event
           period,
           eventType: "AI Commentary",
-          message: `🤖 AI: ${aiText}`,
+          message: `🤖 ${aiText}`,
         });
         console.log(`🤖 [Match ${match.id}] AI Commentary: ${aiText}`);
       }
