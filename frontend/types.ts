@@ -6,8 +6,8 @@ export interface Match {
   status: string; // Allow flexible status strings from API
   startTime: string;
   endTime?: string;
-  homeScore: number;
-  awayScore: number;
+  homeScore: string | number;
+  awayScore: string | number;
   createdAt?: string;
 }
 
@@ -46,8 +46,8 @@ export interface WSMessageScore {
   type: 'score_update';
   matchId: string | number;
   data: {
-    homeScore: number;
-    awayScore: number;
+    homeScore: string | number;
+    awayScore: string | number;
   };
 }
 

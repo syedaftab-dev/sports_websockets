@@ -20,8 +20,8 @@ export const createMatchSchema = z.object({
   awayTeam: z.string().min(1),
   startTime: z.iso.datetime(),
   endTime: z.iso.datetime(),
-  homeScore: z.coerce.number().int().nonnegative().optional(),
-  awayScore: z.coerce.number().int().nonnegative().optional(),
+  homeScore: z.union([z.string(), z.number()]).transform(val => String(val)).optional(),
+  awayScore: z.union([z.string(), z.number()]).transform(val => String(val)).optional(),
 }).superRefine((data, ctx) => {
   const start = new Date(data.startTime);
   const end = new Date(data.endTime);
@@ -35,6 +35,6 @@ export const createMatchSchema = z.object({
 });
 
 export const updateScoreSchema = z.object({
-  homeScore: z.coerce.number().int().nonnegative(),
-  awayScore: z.coerce.number().int().nonnegative(),
+  homeScore: z.union([z.string(), z.number()]).transform(val => String(val)),
+  awayScore: z.union([z.string(), z.number()]).transform(val => String(val)),
 });
