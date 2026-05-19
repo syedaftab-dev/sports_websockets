@@ -1,0 +1,16 @@
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Install production dependencies only
+COPY package*.json ./
+RUN npm ci --omit=dev
+
+# Copy source code (including workers)
+COPY . .
+
+# Expose a dummy port (not needed for worker, but keep for consistency)
+EXPOSE 3000
+
+# Run the live match worker
+CMD ["node", "workers/liveMatchWorker.js"]
