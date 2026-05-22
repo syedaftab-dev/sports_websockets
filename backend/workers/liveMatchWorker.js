@@ -338,6 +338,8 @@ async function processEvents() {
             await axios.patch(`${API_URL}/matches/${match.id}/score`, {
               homeScore: ev.homeScore,
               awayScore: ev.awayScore,
+            }, {
+              headers: { 'x-trusted-worker': 'true' }
             });
           } catch (err) {
             console.error(`Failed to update scores for match ${match.id}:`, err.message);
