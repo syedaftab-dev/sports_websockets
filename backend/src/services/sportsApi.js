@@ -1,7 +1,15 @@
 // src/services/sportsApi.js
 import axios from 'axios';
 
-// Utility to convert Flashscore string IDs to integers for our DB schema
+// Map ESPN leagues
+export const SPORTS_CONFIG = [
+  { sport: 'basketball', league: 'nba', label: 'NBA' },
+  { sport: 'soccer', league: 'usa.1', label: 'MLS' },
+  { sport: 'soccer', league: 'eng.1', label: 'Premier League' },
+  { sport: 'soccer', league: 'esp.1', leagueLabel: 'La Liga' },
+  { sport: 'baseball', league: 'mlb', label: 'MLB' }
+];
+
 export function hashId(str) {
   if (!str) return Math.floor(Math.random() * 1000000);
   let hash = 0;
@@ -10,101 +18,107 @@ export function hashId(str) {
     hash = ((hash << 5) - hash) + char;
     hash = hash & hash;
   }
-  return Math.abs(hash);
+  return (Math.abs(hash) % 2147483640) + 1; // Fit in PG integer range
 }
 
 /**
- * Fetch live and scheduled matches from sportdb (Flashscore) API.
+ * Fetch all matches from all configured ESPN leagues.
  */
 export async function fetchLiveEvents() {
-  const apiKey = process.env.API_SPORTS_KEY;
-  if (!apiKey) {
-    console.error("API_SPORTS_KEY is missing!");
-    return [];
-  }
+  const allEvents = [];
 
-  try {
-    const response = await axios.get('https://api.sportdb.dev/api/flashscore/cricket/live', {
-      headers: { 'X-API-Key': apiKey }
-    });
+  for (const { sport, league } of SPORTS_CONFIG) {
+    try {
+      const url = `https://site.api.espn.com/apis/site/v2/sports/${sport}/${league}/scoreboard?limit=15`;
+      const response = await axios.get(url, { timeout: 8000 });
+      const events = response.data?.events || [];
 
-    const matches = response.data;
-    if (!Array.isArray(matches)) {
-        console.error("Invalid response from sportdb live matches endpoint");
-        return [];
-    }
+      for (const event of events) {
+        const competition = event.competitions?.[0] || {};
+        const competitors = competition.competitors || [];
+        const homeCompetitor = competitors.find(c => c.homeAway === 'home') || {};
+        const awayCompetitor = competitors.find(c => c.homeAway === 'away') || {};
 
-    return matches.map(match => {
-      // Map eventStage to our enum: scheduled, live, finished
-      let status = 'scheduled';
-      const stage = match.eventStage?.toUpperCase();
-      if (stage === 'LIVE' || match.eventStageTypeFromEventStageId === '2' || match.gameTime !== "-1" && match.gameTime !== "") {
+        const homeTeam = homeCompetitor.team?.displayName || 'Home';
+        const awayTeam = awayCompetitor.team?.displayName || 'Away';
+        const homeScore = homeCompetitor.score || '0';
+        const awayScore = awayCompetitor.score || '0';
+        const startTime = new Date(event.date || competition.date || Date.now());
+        const endTime = new Date(startTime.getTime() + 3 * 60 * 60 * 1000); // 3 hours duration
+
+        const state = event.status?.type?.state; // 'pre', 'in', 'post'
+        let status = 'scheduled';
+        if (state === 'in') {
           status = 'live';
-      } else if (stage === 'FINISHED' || match.eventStageTypeFromEventStageId === '3') {
+        } else if (state === 'post') {
           status = 'finished';
+        }
+
+        const rawId = `${sport}:${league}:${event.id}`;
+
+        allEvents.push({
+          _rawId: rawId,
+          id: hashId(rawId),
+          sport,
+          homeTeam,
+          awayTeam,
+          startTime,
+          endTime,
+          status,
+          homeScore,
+          awayScore
+        });
       }
-
-      const startTime = new Date(match.startDateTimeUtc || match.startTime * 1000);
-      const endTime = new Date(startTime.getTime() + 2 * 60 * 60 * 1000);
-
-      return {
-        _rawId: match.eventId, // Keep the raw string ID for fetching details later
-        id: hashId(match.eventId),
-        sport: 'cricket',
-        homeTeam: match.homeName || 'Home Team',
-        awayTeam: match.awayName || 'Away Team',
-        startTime,
-        endTime,
-        status,
-        homeScore: match.homeScore ? String(match.homeScore) : '0',
-        awayScore: match.awayScore ? String(match.awayScore) : '0',
-      };
-    });
-  } catch (err) {
-    console.error('Failed to fetch sportdb matches:', err.message);
-    return [];
+    } catch (err) {
+      console.error(`[ESPN API] Failed to fetch ${sport}/${league}:`, err.message);
+    }
   }
+
+  return allEvents;
 }
 
 /**
- * Fetch detailed events (commentary/incidents) for a specific match.
+ * Fetch detailed commentary/plays for a specific match from ESPN summary endpoint.
  */
 export async function fetchGameSummary(rawId) {
-  const apiKey = process.env.API_SPORTS_KEY;
+  if (!rawId || !rawId.includes(':')) {
+    return { plays: [] };
+  }
+
+  const parts = rawId.split(':');
+  if (parts.length !== 3) {
+    return { plays: [] };
+  }
+
+  const [sport, league, eventId] = parts;
+
   try {
-    const detailsUrl = `https://api.sportdb.dev/api/flashscore/match/${rawId}/details`;
-    const response = await axios.get(detailsUrl, {
-      headers: { 'X-API-Key': apiKey }
-    });
+    const summaryUrl = `https://site.api.espn.com/apis/site/v2/sports/${sport}/${league}/summary?event=${eventId}`;
+    const response = await axios.get(summaryUrl, { timeout: 8000 });
+    const rawPlays = response.data?.plays || [];
 
-    const events = response.data.events || [];
-    
-    // Convert flashscore events into our expected plays format
-    const plays = events.map((event, index) => {
-        let typeName = Array.isArray(event.incidentTypeName) ? event.incidentTypeName.join(' / ') : (event.incidentTypeName || 'Event');
-        if (event.incidentSubtypeName) {
-            typeName += ` (${event.incidentSubtypeName})`;
-        }
-        
-        let playerName = Array.isArray(event.incidentPlayerName) ? event.incidentPlayerName.join(', ') : (event.incidentPlayerName || '');
-        
-        const message = playerName ? `${playerName} - ${typeName}` : typeName;
-        const minute = parseInt(event.incidentTime?.replace("'", "")) || 0;
+    // Map ESPN plays to our unified commentary format
+    const plays = rawPlays.map((play, index) => {
+      const typeName = play.type?.text || 'Play';
+      const periodLabel = play.period?.displayValue || `${play.period?.number || 1} Period`;
+      const clockDisplay = play.clock?.displayValue || '';
 
-        return {
-            id: event.eventId || `evt-${index}`,
-            sequenceNumber: index + 1,
-            text: message,
-            type: { text: typeName },
-            clock: { displayValue: event.incidentTime },
-            period: { number: parseInt(event.incidentHalf) || 1, displayValue: `${event.incidentHalf} Half` },
-            scoringPlay: typeName.toLowerCase().includes('goal')
-        };
+      return {
+        id: play.id || `play-${eventId}-${index}`,
+        sequenceNumber: Number(play.sequenceNumber) || (index + 1),
+        text: play.text || '',
+        type: { text: typeName },
+        clock: { displayValue: clockDisplay },
+        period: { number: play.period?.number || 1, displayValue: periodLabel },
+        scoringPlay: !!play.scoringPlay,
+        homeScore: String(play.homeScore ?? '0'),
+        awayScore: String(play.awayScore ?? '0')
+      };
     });
 
     return { plays };
   } catch (err) {
-    console.error(`Failed to fetch summary for ${rawId}:`, err.message);
+    console.error(`[ESPN API] Failed to fetch summary for ${rawId}:`, err.message);
     return { plays: [] };
   }
 }

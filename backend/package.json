@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "dev": "node --watch src/index.js",
+    "dev": "node --watch src/launcher.js",
     "start": "node src/launcher.js",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",

@@ -140,12 +140,6 @@ export const useMatchData = (): UseMatchData => {
         if (subscribedMatchIdsRef.current.has(matchId) && match.status.toLowerCase() === "finished") {
           subscribedMatchIdsRef.current.delete(matchId);
           unsubscribeMatch(match.id);
-          if (latestMatchIdRef.current == match.id) {
-            setActiveMatchId(null);
-            latestMatchIdRef.current = null;
-            setCommentary([]);
-            setIsCommentaryLoading(false);
-          }
         }
       });
     } catch (err) {

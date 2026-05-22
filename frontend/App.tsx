@@ -37,6 +37,11 @@ const App: React.FC = () => {
     return matches.slice(startIndex, startIndex + pageSize);
   }, [matches, currentPage, pageSize]);
 
+  const activeMatch = useMemo(() => {
+    // eslint-disable-next-line eqeqeq
+    return matches.find((m) => m.id == activeMatchId);
+  }, [matches, activeMatchId]);
+
   return (
     <div className="min-h-screen p-4 md:p-8 font-sans">
       <div className="max-w-7xl mx-auto space-y-8">
@@ -161,7 +166,13 @@ const App: React.FC = () => {
 
           {/* Right Column: Live Feed (Sticky on Desktop) */}
           <aside className="lg:col-span-1 h-[500px] lg:h-[calc(100vh-140px)] lg:sticky lg:top-8">
-            <LiveFeed messages={commentary} isActive={!!activeMatchId} isLoading={isCommentaryLoading} />
+            <LiveFeed
+              messages={commentary}
+              isActive={!!activeMatchId}
+              isLoading={isCommentaryLoading}
+              matchStatus={activeMatch?.status}
+              matchStartTime={activeMatch?.startTime}
+            />
           </aside>
 
         </div>

@@ -12,6 +12,7 @@ export const MatchCard: React.FC<MatchCardProps> = ({ match, isActive, onWatch, 
   // Handle case-insensitive status check from API
   const statusLower = match.status.toLowerCase();
   const isLive = statusLower === 'live';
+  const isUpcoming = statusLower === 'scheduled' || statusLower === 'upcoming';
   const [homePulse, setHomePulse] = useState(false);
   const [awayPulse, setAwayPulse] = useState(false);
   const prevScoreRef = useRef({ home: match.homeScore, away: match.awayScore });
@@ -92,27 +93,46 @@ export const MatchCard: React.FC<MatchCardProps> = ({ match, isActive, onWatch, 
 
       {/* Teams & Score */}
       <div className="flex flex-col gap-3 mb-6">
-        <div className="flex justify-between items-center">
-          <span className="font-bold text-lg text-brand-dark line-clamp-1">{match.homeTeam}</span>
-          <span
-            className={`
-              font-bold text-2xl border border-black rounded-lg px-3 py-1 min-w-[3rem] text-center transition-colors
-              ${homePulse ? 'bg-brand-yellow animate-pulse' : 'bg-gray-100'}
-            `}
-          >
-            {match.homeScore}
+        <div className="flex justify-between items-center gap-3">
+          <span className="font-bold text-base text-brand-dark truncate min-w-0 flex-1" title={match.homeTeam}>
+            {match.homeTeam}
           </span>
+          {!isUpcoming && (
+            <span
+              className={`
+                font-bold border border-black rounded-lg px-2 py-1 text-center transition-colors shrink-0 max-w-[60%] leading-tight
+                ${match.homeScore?.length > 20 ? 'text-xs px-1.5' : match.homeScore?.length > 10 ? 'text-sm' : 'text-lg'}
+                ${homePulse ? 'bg-brand-yellow animate-pulse' : 'bg-gray-100'}
+              `}
+            >
+              {match.homeScore}
+            </span>
+          )}
         </div>
-        <div className="flex justify-between items-center">
-          <span className="font-bold text-lg text-brand-dark line-clamp-1">{match.awayTeam}</span>
-          <span
-            className={`
-              font-bold text-2xl border border-black rounded-lg px-3 py-1 min-w-[3rem] text-center transition-colors
-              ${awayPulse ? 'bg-brand-yellow animate-pulse' : 'bg-gray-100'}
-            `}
-          >
-            {match.awayScore}
+
+        {isUpcoming && (
+          <div className="py-2 text-center border-2 border-dashed border-gray-300 rounded-xl bg-gray-50 my-1">
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">
+              Match starts at {new Date(match.startTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+            </p>
+          </div>
+        )}
+
+        <div className="flex justify-between items-center gap-3">
+          <span className="font-bold text-base text-brand-dark truncate min-w-0 flex-1" title={match.awayTeam}>
+            {match.awayTeam}
           </span>
+          {!isUpcoming && (
+            <span
+              className={`
+                font-bold border border-black rounded-lg px-2 py-1 text-center transition-colors shrink-0 max-w-[60%] leading-tight
+                ${match.awayScore?.length > 20 ? 'text-xs px-1.5' : match.awayScore?.length > 10 ? 'text-sm' : 'text-lg'}
+                ${awayPulse ? 'bg-brand-yellow animate-pulse' : 'bg-gray-100'}
+              `}
+            >
+              {match.awayScore}
+            </span>
+          )}
         </div>
       </div>
 

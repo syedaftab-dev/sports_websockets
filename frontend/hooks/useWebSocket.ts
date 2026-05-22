@@ -33,7 +33,8 @@ export const useWebSocket = (
   const initConnection = useCallback(() => {
     // Cleanup previous connection
     if (ws.current) {
-      isIntentionalClose.current = true;
+      ws.current.onclose = null;
+      ws.current.onerror = null;
       ws.current.close();
     }
 

@@ -3,7 +3,7 @@ import {createMatchSchema, listMatchesQuerySchema} from "../validation/matches.j
 import {matches} from "../db/schema.js";
 import {db} from "../db/db.js";
 import {getMatchStatus} from "../utils/match-status.js";
-import {desc, eq} from "drizzle-orm";
+import {desc, eq, ne} from "drizzle-orm";
 import {matchIdParamSchema, updateScoreSchema} from "../validation/matches.js";
 import {syncMatchStatus, MATCH_STATUS} from "../utils/match-status.js";
 
@@ -25,6 +25,7 @@ matchRouter.get('/', async (req, res) => {
         const data = await db
             .select()
             .from(matches)
+            .where(ne(matches.sport, 'cricket'))
             .orderBy((desc(matches.createdAt)))
             .limit(limit)
 
@@ -53,8 +54,8 @@ matchRouter.post('/', async (req, res) => {
             status: getMatchStatus(startTime, endTime),
         }).returning();
 
-        if(res.app.locals.broadcastMatchCreated) {
-            res.app.locals.broadcastMatchCreated(event);
+        if(req.app.locals.broadcastMatchCreated) {
+            req.app.locals.broadcastMatchCreated(event);
         }
 
         res.status(201).json({ data: event });
@@ -97,12 +98,15 @@ matchRouter.patch('/:id/score', async (req, res) => {
             return res.status(404).json({ error: 'Match not found' });
         }
 
-        await syncMatchStatus(existing, async (nextStatus) => {
-            await db
-                .update(matches)
-                .set({ status: nextStatus })
-                .where(eq(matches.id, matchId));
-        });
+        const isWorker = req.headers['x-trusted-worker'] === 'true';
+        if (!isWorker) {
+            await syncMatchStatus(existing, async (nextStatus) => {
+                await db
+                    .update(matches)
+                    .set({ status: nextStatus })
+                    .where(eq(matches.id, matchId));
+            });
+        }
 
         // Score updates are allowed for any match status to sync final and pre-match scores
 
@@ -115,8 +119,8 @@ matchRouter.patch('/:id/score', async (req, res) => {
             .where(eq(matches.id, matchId))
             .returning();
 
-        if (res.app.locals.broadcastScoreUpdate) {
-            res.app.locals.broadcastScoreUpdate(matchId, {
+        if (req.app.locals.broadcastScoreUpdate) {
+            req.app.locals.broadcastScoreUpdate(matchId, {
                 homeScore: updated.homeScore,
                 awayScore: updated.awayScore,
             });

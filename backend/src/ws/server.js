@@ -95,7 +95,7 @@ export function attachWebSocketServer(server) {
     const wss = new WebSocketServer({ noServer: true, path: '/ws', maxPayload: 1024 * 1024 });
 
     server.on('upgrade', async (req, socket, head) => {
-        const { pathname } = new URL(req.url, `http://${req.headers.host}`);
+        const pathname = req.url.split('?')[0];
         if (pathname !== '/ws') {
             return;
         }

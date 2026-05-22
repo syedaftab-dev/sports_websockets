@@ -5,6 +5,8 @@ interface LiveFeedProps {
   messages: Commentary[];
   isActive: boolean;
   isLoading?: boolean;
+  matchStatus?: string;
+  matchStartTime?: string;
 }
 
 const formatMinute = (minute?: number) => {
@@ -25,7 +27,13 @@ const formatMetadata = (metadata?: Record<string, unknown>) => {
   }
 };
 
-export const LiveFeed: React.FC<LiveFeedProps> = ({ messages, isActive, isLoading }) => {
+export const LiveFeed: React.FC<LiveFeedProps> = ({
+  messages,
+  isActive,
+  isLoading,
+  matchStatus,
+  matchStartTime,
+}) => {
   if (!isActive) {
     return (
       <div className="h-full flex flex-col items-center justify-center text-center p-8 bg-gray-50 border-2 border-black rounded-2xl border-dashed">
@@ -36,6 +44,33 @@ export const LiveFeed: React.FC<LiveFeedProps> = ({ messages, isActive, isLoadin
         </div>
         <h3 className="font-bold text-xl mb-2">No Match Selected</h3>
         <p className="text-gray-500 max-w-xs">Select a match from the list to view live commentary and real-time updates.</p>
+      </div>
+    );
+  }
+
+  const statusLower = matchStatus?.toLowerCase();
+  const isUpcoming = statusLower === 'scheduled' || statusLower === 'upcoming';
+
+  if (isUpcoming) {
+    return (
+      <div className="flex flex-col h-full bg-white border-2 border-black rounded-2xl overflow-hidden shadow-hard animate-in fade-in duration-300">
+        <div className="p-4 bg-brand-blue border-b-2 border-black flex justify-between items-center">
+          <h3 className="font-bold text-lg">Commentary</h3>
+          <span className="text-xs bg-white px-2 py-0.5 border border-black rounded-md font-medium">Upcoming</span>
+        </div>
+        <div className="flex-1 flex flex-col items-center justify-center text-center p-8 bg-gray-50">
+          <div className="w-16 h-16 bg-brand-yellow rounded-full border-2 border-black flex items-center justify-center mb-4">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-black animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <h3 className="font-bold text-lg mb-2 text-brand-dark">Commentary will begin at match start</h3>
+          {matchStartTime && (
+            <p className="text-xs text-gray-500 bg-white border border-gray-300 rounded-md px-3 py-1 font-semibold uppercase tracking-wider">
+              Starts at: {new Date(matchStartTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+            </p>
+          )}
+        </div>
       </div>
     );
   }

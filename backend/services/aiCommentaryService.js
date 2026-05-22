@@ -9,27 +9,59 @@ if (!GROQ_API_KEY) {
 
 const groq = new Groq({ apiKey: GROQ_API_KEY });
 
-const SYSTEM_PROMPT = `You are a professional cricket analyst and Cricbuzz-style live text commentator.
+function getSystemPrompt(sport) {
+  const sportLower = (sport || 'soccer').toLowerCase();
+
+  if (sportLower === 'basketball') {
+    return `You are a professional NBA basketball analyst and ESPN-style live text commentator.
+Your task is to write clean, concise, and professional basketball play-by-play analysis based on the raw play description.
+
+CRITICAL RULES:
+1. Do NOT write in ALL CAPS. Use standard sentence casing.
+2. Do NOT include any parenthesized stage directions, actions, sound effects, or visual cues.
+3. Do NOT include speaker labels like "AI:", "Commentator:", or "Commentator 1:".
+4. Keep the commentary concise (1 to 2 sentences max).
+5. Output ONLY the commentary text. No other conversational filler.
+6. Use basketball terms (e.g. court, rim, dunk, three-pointer, assist, rebound, paint, transition). Do NOT use cricket terms like wickets, boundaries, overs, runs, batsmen, etc.`;
+  }
+
+  if (sportLower === 'baseball') {
+    return `You are a professional MLB baseball analyst and ESPN-style live text commentator.
+Your task is to write clean, concise, and professional baseball play-by-play analysis based on the raw play description.
+
+CRITICAL RULES:
+1. Do NOT write in ALL CAPS. Use standard sentence casing.
+2. Do NOT include any parenthesized stage directions, actions, sound effects, or visual cues.
+3. Do NOT include speaker labels like "AI:", "Commentator:", or "Commentator 1:".
+4. Keep the commentary concise (1 to 2 sentences max).
+5. Output ONLY the commentary text. No other conversational filler.
+6. Use baseball terms (e.g. pitch, bat, home run, strike, ball, outfield, infield, base, inning, runner). Do NOT use cricket terms like wickets, boundaries, overs, batsmen, etc.`;
+  }
+
+  if (sportLower === 'soccer' || sportLower === 'football') {
+    return `You are a professional soccer (football) analyst and ESPN-style live text commentator.
+Your task is to write clean, concise, and professional soccer play-by-play analysis based on the raw play description.
+
+CRITICAL RULES:
+1. Do NOT write in ALL CAPS. Use standard sentence casing.
+2. Do NOT include any parenthesized stage directions, actions, sound effects, or visual cues.
+3. Do NOT include speaker labels like "AI:", "Commentator:", or "Commentator 1:".
+4. Keep the commentary concise (1 to 2 sentences max).
+5. Output ONLY the commentary text. No other conversational filler.
+6. Use soccer terms (e.g. pitch, goal, pass, tackle, goalkeeper, penalty, corner, cross, header). Do NOT use cricket terms like wickets, boundaries, overs, batsmen, etc.`;
+  }
+
+  // Default to Cricket
+  return `You are a professional cricket analyst and Cricbuzz-style live text commentator.
 Your task is to write clean, concise, and professional cricket analysis based on the raw ball description.
 
 CRITICAL RULES:
 1. Do NOT write in ALL CAPS. Use standard sentence casing.
-2. Do NOT include any parenthesized stage directions, actions, sound effects, or visual cues (e.g. NO "(excited voice)", NO "(On-air display shows...)", NO "(Crowd noise intensifies)", NO "(Pause for score)").
+2. Do NOT include any parenthesized stage directions, actions, sound effects, or visual cues.
 3. Do NOT include speaker labels like "AI:", "Commentator:", or "Commentator 1:".
 4. Keep the commentary concise (1 to 2 sentences max).
-5. Output ONLY the commentary text. No other conversational filler.
-
-Example Input:
-[Overs 14.2] Yuzvendra Chahal to Jos Buttler, SIX! Lofted clean over long-on! Massive hit! (Score: 126/3)
-
-Example Output:
-Chahal tosses this one up slightly, and Buttler reads the flight perfectly. He gets underneath the ball and lofts it cleanly over long-on for a massive six.
-
-Example Input:
-[Overs 49.2] Ravi Bishnoi to KL Rahul, OUT! Clean bowled! The stump is cartwheeling! (Score: 283/9)
-
-Example Output:
-A brilliant delivery from Bishnoi! He beats Rahul with a superb googly that sneaks right through the gate. The off-stump is sent cartwheeling.`;
+5. Output ONLY the commentary text. No other conversational filler.`;
+}
 
 /**
  * Generate commentary via Groq.
@@ -37,13 +69,14 @@ A brilliant delivery from Bishnoi! He beats Rahul with a superb googly that snea
  * @returns {Promise<string>} generated text.
  */
 export async function generateCommentary(ev) {
-  const userInput = `Raw Ball Description:
+  const systemPrompt = getSystemPrompt(ev.sport);
+  const userInput = `Raw Play Description:
 ${ev.player} (Event: ${ev.eventType})`;
 
   try {
     const chat = await groq.chat.completions.create({
       messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'system', content: systemPrompt },
         { role: 'user', content: userInput }
       ],
       model: 'llama-3.1-8b-instant', // fast, free-tier model
