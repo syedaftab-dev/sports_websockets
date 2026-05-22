@@ -178,7 +178,7 @@ const App: React.FC = () => {
         </div>
 
         {/* Documentation / Verification Section */}
-        <section className="mt-12 border-t-2 border-gray-200 pt-8">
+        {/* <section className="mt-12 border-t-2 border-gray-200 pt-8">
           <div className="bg-white border-2 border-black rounded-2xl p-6">
             <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
               <span className="bg-black text-white w-6 h-6 flex items-center justify-center rounded-full text-xs">?</span>
@@ -201,9 +201,10 @@ const App: React.FC = () => {
               </div>
             </div>
           </div>
-        </section>
+        </section> */}
 
         <footer className="text-center py-6 text-xs text-gray-500 font-medium">
+          Commentary can be slow due to external api responds time <br />
           Note: The data shown here is for demonstration purposes. It uses a background worker, simulated APIs, and WebSockets to showcase real-time score propagation.
         </footer>
       </div>
