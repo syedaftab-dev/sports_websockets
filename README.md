@@ -2,13 +2,13 @@
   <img src="./assets/image.png" alt="Sportz Banner" width="100%" />
 
   <h1>⚡ Sportz - Real-Time AI Sports Dashboard</h1>
-  <p><strong>A blazingly fast, real-time sports scoreboard and AI-generated play-by-play commentary platform.</strong></p>
+  <p><strong>A blazingly fast, real-time multi-sport scoreboard and AI-generated play-by-play commentary platform powered by WebSockets, ESPN data, and Groq LLM.</strong></p>
 
   <p>
     <a href="#features">Features</a> •
     <a href="#tech-stack">Tech Stack</a> •
-    <a href="#getting-started">Getting Started</a> •
-    <a href="#backend-architecture">Backend Architecture</a>
+    <a href="#backend-architecture">Backend Architecture</a> •
+    <a href="#getting-started">Getting Started</a>
   </p>
 </div>
 
@@ -16,12 +16,13 @@
 
 ## ✨ Features
 
-- **🔴 True Real-Time Updates:** WebSockets power sub-second score and timeline updates on the React client without any page refreshing.
-- **🏏 Blazing Fast Data Integration:** Dedicated Node.js background worker fetches global Cricket scores from the Flashscore API (`sportdb.dev`), perfectly mimicking the speed of Cricbuzz.
-- **🤖 AI Color Commentary:** The backend triggers the Groq Llama 3.1 model to generate witty, dynamic, and insightful commentary for major in-game events in real-time.
-- **🛡️ Enterprise Grade Security:** Express routes are guarded by Arcjet rate-limiting to prevent API abuse and DDoS attacks.
-- **🔄 Resilient Fallbacks:** Features a custom local Redis proxy to prevent crashes if external Upstash Redis connections fail.
-- **🎨 Brutalist & Premium UI:** Designed with a sleek, dark-mode brutalist aesthetic featuring glassmorphism and smooth micro-animations.
+- **🔴 True Real-Time Updates:** WebSockets power sub-second score and commentary updates on the React client — zero page refreshes, zero polling from the frontend.
+- **⚽🏀⚾ Multi-Sport Coverage:** Unified data pipeline ingests live scoreboard and play-by-play data from ESPN APIs across **4 sports** (Soccer, Basketball, Baseball, Cricket) and **8+ leagues** (MLS, EPL, La Liga, NBA, MLB, IPL, and more).
+- **🤖 AI Color Commentary:** Groq Llama 3.1 generates dynamic, sport-specific analysis for every major in-game event. Ambient AI commentary fills in gaps during slow API response windows to keep the feed alive.
+- **🛡️ Enterprise-Grade Security:** Express routes are guarded by Arcjet sliding-window rate limiters to prevent API abuse and DDoS attacks.
+- **🔄 Resilient Fallbacks:** Custom Redis proxy with automatic fallback to in-memory pub/sub prevents crashes when external Upstash Redis connections fail. Simulation mode auto-activates when no live matches are available.
+- **🎨 Brutalist & Premium UI:** Designed with a sleek brutalist aesthetic featuring smooth micro-animations, pulse effects on score changes, and a real-time commentary feed panel.
+- **📊 Smart Match State Management:** Correctly differentiates between Upcoming, Live, and Finished match states with appropriate UI treatments for each.
 
 ---
 
@@ -46,23 +47,78 @@
 ![Arcjet](https://img.shields.io/badge/Arcjet-000000?style=for-the-badge&logo=security&logoColor=white)
 ![WebSockets](https://img.shields.io/badge/WebSockets-black?style=for-the-badge&logo=socket.io&badgeColor=010101)
 
+### 🔍 Code Quality & Monitoring
+![CodeRabbit](https://img.shields.io/badge/CodeRabbit-000000?style=for-the-badge&logo=rabbit&logoColor=white)
+![Site24x7](https://img.shields.io/badge/Site24x7-4285F4?style=for-the-badge&logo=google-cloud&logoColor=white)
+
+- **CodeRabbit** — AI-powered code review on every pull request. Automated review of code quality, security vulnerabilities, and best practices across 42+ commits.
+- **Site24x7 (APM Insight)** — Application performance monitoring, uptime tracking, and real-time error logging for the production Node.js backend via the `apminsight` agent.
+
 ---
 
 ## 🏗 Backend Architecture
 
 The backend is completely decoupled into two primary services working in harmony over local REST and WebSockets:
 
-1. **The Express WebSocket Server (`src/index.js`)**
-   - Hosts the REST API routes for matching and commentary (`/matches`, `/matches/:id/commentary`).
-   - Uses **Drizzle ORM** connected to a **Neon Postgres** database to enforce strict typing and schema validation using **Zod**.
-   - Maintains active `ws` WebSocket connections with clients, broadcasting `score_update` and `commentary` events whenever the database is mutated.
-   - Guarded by **Arcjet** sliding-window rate limiters.
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                        CLIENTS (React)                          │
+│   WebSocket subscribe ───────── REST GET /matches               │
+└──────────┬────────────────────────────┬─────────────────────────┘
+           │ ws://                      │ HTTP
+           ▼                            ▼
+┌──────────────────────────────────────────────────────────────────┐
+│                   EXPRESS API SERVER (port 8000)                 │
+│                                                                  │
+│  ┌─────────────┐  ┌──────────────┐  ┌─────────────────────┐    │
+│  │ Match Routes │  │ Commentary   │  │ WebSocket Server    │    │
+│  │ PATCH /score │  │ POST /comm   │  │ Broadcast to subs   │    │
+│  └──────┬──────┘  └──────┬───────┘  └──────────┬──────────┘    │
+│         │                │                      │                │
+│         ▼                ▼                      ▼                │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │          Redis Pub/Sub (Upstash / Mock Fallback)         │   │
+│  └──────────────────────────────────────────────────────────┘   │
+│         │                                                        │
+│         ▼                                                        │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │         Neon PostgreSQL (Drizzle ORM + Zod schemas)      │   │
+│  └──────────────────────────────────────────────────────────┘   │
+└──────────────────────────────────────────────────────────────────┘
+           ▲
+           │ HTTP PATCH/POST (internal)
+           │
+┌──────────────────────────────────────────────────────────────────┐
+│                   LIVE MATCH WORKER (background)                 │
+│                                                                  │
+│  ┌───────────────────┐  ┌─────────────────────────────────┐    │
+│  │ ESPN Scoreboard    │  │ ESPN Summary (Play-by-Play)     │    │
+│  │ Poller (25s cycle) │  │ Fetcher                         │    │
+│  └────────┬──────────┘  └────────────┬────────────────────┘    │
+│           │                          │                           │
+│           ▼                          ▼                           │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │  Simulation Engine (chronological play-by-play replay)   │   │
+│  │  • Tracks running scores per tick                        │   │
+│  │  • Single source of truth via PATCH /score               │   │
+│  └────────────────────────┬─────────────────────────────────┘   │
+│                           │                                      │
+│                           ▼                                      │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │           Groq LLM (Llama 3.1 8B) Commentary            │   │
+│  │  • Sport-specific prompts (Soccer/Basketball/Baseball)   │   │
+│  │  • Ambient AI commentary during slow API windows         │   │
+│  └──────────────────────────────────────────────────────────┘   │
+└──────────────────────────────────────────────────────────────────┘
+```
 
-2. **The Data Poller Worker (`workers/liveMatchWorker.js`)**
-   - A standalone Node process that polls the `sportdb.dev` Flashscore API every 5 seconds.
-   - It hashes global String-based event IDs into 32-bit integers to fit our Postgres relational schema.
-   - Utilizes a graceful `400ms` micro-delay queue to strictly respect third-party API rate limits.
-   - For every major play, it offloads a prompt to the **Groq API** to generate AI commentary before pushing the data to the local Express server via HTTP `PATCH`/`POST`.
+### Key Design Decisions
+
+1. **Single Source of Truth for Scores:** The `PATCH /matches/:id/score` endpoint is the **only** path that writes scores to the database and broadcasts via WebSocket. The worker's `upsertMatch()` skips score writes during simulation to prevent the ESPN scoreboard's final score from overwriting the simulated running score.
+
+2. **Chronological Play Replay:** ESPN play-by-play data is sorted by `sequenceNumber` (not reversed) and replayed one play per 25-second tick. Each play carries a cumulative running score that is synced to the simulation state.
+
+3. **Graceful Redis Degradation:** A custom `MockRedis` EventEmitter-based proxy seamlessly replaces the real Upstash Redis pub/sub when the connection fails, keeping the app fully functional on localhost without external dependencies.
 
 ---
 
@@ -76,13 +132,13 @@ Ensure you have the following installed:
 - Node.js (v18+)
 - A Neon Postgres Database connection string
 - Groq API Key
-- SportDB API Key (for Flashscore data)
 - Arcjet Key
+- (Optional) Upstash Redis URL
 
 ### 1. Clone & Install
 
 ```bash
-git clone https://github.com/yourusername/sportz.git
+git clone https://github.com/syedaftab-dev/sports_websockets.git
 cd sportz
 
 # Install backend dependencies
@@ -107,7 +163,6 @@ ARCJET_KEY="your_arcjet_key"
 ARCJET_ENV="development"
 
 GROQ_API_KEY="your_groq_key"
-API_SPORTS_KEY="your_sportdb_key"
 REDIS_URL="your_upstash_redis_url"
 ```
 
@@ -122,28 +177,21 @@ npx drizzle-kit push
 
 ### 4. Running the Application
 
-You will need three terminal tabs to run the full stack locally:
+You need **two** terminal tabs:
 
-**Terminal 1: Start the Backend Server**
+**Terminal 1: Start the Backend (API + Worker)**
 ```bash
 cd backend
 npm run dev
 ```
 
-**Terminal 2: Start the Background Worker (Syncs Live Data)**
-```bash
-cd backend
-node workers/liveMatchWorker.js
-```
-
-**Terminal 3: Start the Frontend Client**
+**Terminal 2: Start the Frontend Client**
 ```bash
 cd frontend
 npm run dev
 ```
 
-Visit `http://localhost:3000` to view the live dashboard!
+Visit `https://sports-websockets-seven.vercel.app/` to view the live dashboard!
 
 ---
-
-
+</CodeContent>
