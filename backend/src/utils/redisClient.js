@@ -43,9 +43,19 @@ if (redisUrl) {
   try {
     // Connect with short timeouts and minimal retries to fall back quickly if blocked
     realPublisher = new IORedis(redisUrl, {
-      maxRetriesPerRequest: 1,
+      maxRetriesPerRequest: null,
       connectTimeout: 3000,
       lazyConnect: false,
+      retryStrategy(times) {
+        if (times > 2) {
+          if (!useMock) {
+            console.warn("⚠️ Redis connection failed. Falling back to local in-memory Mock Redis.");
+            useMock = true;
+          }
+          return null; // Stop retrying
+        }
+        return Math.min(times * 100, 1000);
+      },
       reconnectOnError: () => false,
     });
     realSubscriber = realPublisher.duplicate();

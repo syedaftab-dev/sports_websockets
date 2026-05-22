@@ -43,7 +43,7 @@ function sortPlaysChronologically(plays) {
 // Helper generators for fallback mock plays based on sport
 function generateSportPlay(match, index) {
   const sport = (match.sport || 'soccer').toLowerCase();
-  
+
   if (sport === 'basketball') {
     const plays = [
       "Jump ball to start the match!",
@@ -59,7 +59,7 @@ function generateSportPlay(match, index) {
     ];
     const msg = plays[index % plays.length];
     const isScore = msg.includes("made!") || msg.includes("layup") || msg.includes("DUNK!");
-    
+
     return {
       id: `sim-hoops-${match.id}-${index}`,
       sequenceNumber: index + 1,
@@ -85,7 +85,7 @@ function generateSportPlay(match, index) {
     ];
     const msg = plays[index % plays.length];
     const isHR = msg.includes("HOME RUN!");
-    
+
     return {
       id: `sim-baseball-${match.id}-${index}`,
       sequenceNumber: index + 1,
@@ -112,7 +112,7 @@ function generateSportPlay(match, index) {
     ];
     const msg = plays[index % plays.length];
     const isGoal = msg.includes("GOAL!");
-    
+
     return {
       id: `sim-soccer-${match.id}-${index}`,
       sequenceNumber: index + 1,
@@ -128,8 +128,11 @@ function generateSportPlay(match, index) {
 
 /**
  * Upsert match details.
+ * When skipScores=true, we only upsert metadata (status, teams, times) but
+ * NOT scores. Scores are updated exclusively via the PATCH /score endpoint
+ * to avoid the scoreboard's final score overwriting the simulated running score.
  */
-async function upsertMatch(ev) {
+async function upsertMatch(ev, { skipScores = false } = {}) {
   const { id, sport, homeTeam, awayTeam, startTime, endTime, status, homeScore, awayScore } = ev;
   if (!id) return null;
 
@@ -141,9 +144,18 @@ async function upsertMatch(ev) {
     startTime: new Date(startTime),
     endTime: new Date(endTime),
     status,
-    homeScore: String(homeScore),
-    awayScore: String(awayScore),
+    homeScore: skipScores ? '0' : String(homeScore),
+    awayScore: skipScores ? '0' : String(awayScore),
   };
+
+  const updateData = {
+    status,
+    endTime: new Date(endTime),
+  };
+  if (!skipScores) {
+    updateData.homeScore = String(homeScore);
+    updateData.awayScore = String(awayScore);
+  }
 
   try {
     const [record] = await db
@@ -155,12 +167,7 @@ async function upsertMatch(ev) {
   } catch (e) {
     const [updated] = await db
       .update(matches)
-      .set({
-        status,
-        homeScore: String(homeScore),
-        awayScore: String(awayScore),
-        endTime: new Date(endTime),
-      })
+      .set(updateData)
       .where(eq(matches.id, id))
       .returning();
     return updated;
@@ -210,9 +217,9 @@ async function processPlay(play, match) {
   }
 
   // 2. Trigger AI Commentary for important events
-  const isImportant = play.scoringPlay === true || 
-                      /goal|three point|dunk|touchdown|home run|wicket/i.test(eventType || "") ||
-                      /goal|3-pt|three pointer|dunk|home run/i.test(message);
+  const isImportant = play.scoringPlay === true ||
+    /goal|three point|dunk|touchdown|home run|wicket/i.test(eventType || "") ||
+    /goal|3-pt|three pointer|dunk|home run/i.test(message);
 
   if (isImportant && process.env.GROQ_API_KEY) {
     try {
@@ -296,10 +303,10 @@ async function processEvents() {
         console.log(`[Worker] Real Live Match ${ev.homeTeam} vs ${ev.awayTeam}: Fetching latest play log...`);
         const summary = await fetchGameSummary(ev._rawId);
         let plays = summary.plays || [];
-        
+
         // Chronological order (oldest to newest)
         plays = sortPlaysChronologically(plays);
-        
+
         console.log(`[Worker] Processing ${plays.length} real live plays immediately...`);
         for (const play of plays) {
           await processPlay(play, match);
@@ -309,8 +316,9 @@ async function processEvents() {
         if (!simulationStates.has(ev.id)) {
           console.log(`[Worker] Initializing play-by-play simulation cache for ${ev.homeTeam} vs ${ev.awayTeam} (ID: ${ev.id})...`);
           const summary = await fetchGameSummary(ev._rawId);
-          
+
           let plays = summary.plays || [];
+          const hasESPNScores = plays.length > 0 && plays.some(p => p.homeScore !== undefined);
           if (plays.length === 0) {
             console.log(`[Worker] Match ${ev.id} has no ESPN play log. Creating mock events.`);
             plays = Array.from({ length: 50 }, (_, i) => generateSportPlay(ev, i));
@@ -322,20 +330,23 @@ async function processEvents() {
             currentPlayIndex: 0,
             plays,
             homeScore: 0,
-            awayScore: 0
+            awayScore: 0,
+            hasESPNScores, // ESPN plays carry running totals; mock plays need manual tracking
           });
         }
 
         const state = simulationStates.get(ev.id);
-        
+
         if (state.currentPlayIndex < state.plays.length) {
           const currentPlay = state.plays[state.currentPlayIndex];
 
-          // Update scores
+          // ── Determine the score for this tick ──
           if (currentPlay.homeScore !== undefined && currentPlay.awayScore !== undefined) {
-            ev.homeScore = String(currentPlay.homeScore);
-            ev.awayScore = String(currentPlay.awayScore);
-          } else {
+            // ESPN play with running total — use it directly AND sync state
+            state.homeScore = Number(currentPlay.homeScore);
+            state.awayScore = Number(currentPlay.awayScore);
+          } else if (!state.hasESPNScores) {
+            // Mock plays without running totals — manually increment on scoring plays
             if (currentPlay.scoringPlay) {
               const isHomeScoring = Math.random() > 0.5;
               if (isHomeScoring) {
@@ -344,19 +355,21 @@ async function processEvents() {
                 state.awayScore += currentPlay.points || currentPlay.runs || currentPlay.goals || 1;
               }
             }
-            ev.homeScore = String(state.homeScore);
-            ev.awayScore = String(state.awayScore);
           }
+          // else: ESPN play without score on this particular event — keep state unchanged
 
-          // Upsert match with new live score
-          const match = await upsertMatch(ev);
+          const tickHomeScore = String(state.homeScore);
+          const tickAwayScore = String(state.awayScore);
+
+          // Upsert match metadata (status/teams) but NOT scores — PATCH is the single source of truth
+          const match = await upsertMatch(ev, { skipScores: true });
           if (!match) continue;
 
-          // Post score updates
+          // Post score updates — this is the ONLY place scores are written to DB & broadcast
           try {
             await axios.patch(`${API_URL}/matches/${match.id}/score`, {
-              homeScore: ev.homeScore,
-              awayScore: ev.awayScore,
+              homeScore: tickHomeScore,
+              awayScore: tickAwayScore,
             }, {
               headers: { 'x-trusted-worker': 'true' }
             });
@@ -370,16 +383,20 @@ async function processEvents() {
           // Advance to next play
           state.currentPlayIndex++;
         } else {
-          // Simulation finished!
+          // Simulation finished — use the tracked state scores (correct for both ESPN & mock)
           ev.status = 'finished';
-          ev.homeScore = String(state.homeScore);
-          ev.awayScore = String(state.awayScore);
-          await upsertMatch(ev);
+          const finalHome = String(state.homeScore);
+          const finalAway = String(state.awayScore);
+
+          // Write final status + scores
+          ev.homeScore = finalHome;
+          ev.awayScore = finalAway;
+          await upsertMatch(ev); // skipScores=false (default) — write final scores
 
           try {
             await axios.patch(`${API_URL}/matches/${ev.id}/score`, {
-              homeScore: ev.homeScore,
-              awayScore: ev.awayScore,
+              homeScore: finalHome,
+              awayScore: finalAway,
             }, {
               headers: { 'x-trusted-worker': 'true' }
             });
@@ -387,7 +404,7 @@ async function processEvents() {
             console.error(`Failed to patch final scores for match ${ev.id}:`, err.message);
           }
 
-          console.log(`🏁 Match ${ev.homeTeam} vs ${ev.awayTeam} simulation complete. Final score: ${ev.homeScore}-${ev.awayScore}`);
+          console.log(`🏁 Match ${ev.homeTeam} vs ${ev.awayTeam} simulation complete. Final score: ${finalHome}-${finalAway}`);
           simulationStates.delete(ev.id);
         }
       }
@@ -411,7 +428,7 @@ async function startWorker() {
   } catch (err) {
     console.error("Failed to clear database on startup:", err.message);
   }
-  
+
   // Run immediately on start
   await processEvents();
 }
@@ -463,7 +480,7 @@ async function checkAndPushAmbientComments() {
         const sport = (match.sport || 'soccer').toLowerCase();
         const comments = AMBIENT_COMMENTS[sport] || AMBIENT_COMMENTS.soccer;
         const randomComment = comments[Math.floor(Math.random() * comments.length)];
-        
+
         // Find next sequence number
         const lastComms = await db
           .select({ sequence: commentary.sequence })
@@ -496,7 +513,7 @@ async function checkAndPushAmbientComments() {
 setInterval(checkAndPushAmbientComments, 10000);
 
 // Poll every 25 seconds for a natural live sports pace
-const POLL_INTERVAL_MS = 25000; 
+const POLL_INTERVAL_MS = 25000;
 setInterval(processEvents, POLL_INTERVAL_MS);
 
 startWorker();

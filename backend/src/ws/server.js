@@ -170,8 +170,12 @@ export function attachWebSocketServer(server) {
     });
 
     // Subscribe to all match and commentary channels (wildcard)
-    redisSubscriber.psubscribe('match:*');
-    redisSubscriber.psubscribe('commentary:*');
+    redisSubscriber.psubscribe('match:*').catch((err) => {
+        console.warn("[WS] Redis match subscription failed, falling back to mock:", err.message);
+    });
+    redisSubscriber.psubscribe('commentary:*').catch((err) => {
+        console.warn("[WS] Redis commentary subscription failed, falling back to mock:", err.message);
+    });
 
     function broadcastMatchCreated(match) {
         broadcastToAll(wss, { type: 'match_created', data: match });
