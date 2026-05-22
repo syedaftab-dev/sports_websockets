@@ -111,8 +111,8 @@ export async function fetchGameSummary(rawId) {
         clock: { displayValue: clockDisplay },
         period: { number: play.period?.number || 1, displayValue: periodLabel },
         scoringPlay: !!play.scoringPlay,
-        homeScore: String(play.homeScore ?? '0'),
-        awayScore: String(play.awayScore ?? '0')
+        homeScore: play.homeScore !== undefined && play.homeScore !== null ? String(play.homeScore) : undefined,
+        awayScore: play.awayScore !== undefined && play.awayScore !== null ? String(play.awayScore) : undefined
       };
     });
 

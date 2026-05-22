@@ -30,6 +30,16 @@ const simulationStates = new Map();
 const lastActivityTimestamps = new Map();
 let activeLiveMatchesList = [];
 
+// Helper to sort plays chronologically by sequence number
+function sortPlaysChronologically(plays) {
+  if (!plays) return [];
+  return [...plays].sort((a, b) => {
+    const seqA = Number(a.sequenceNumber) || 0;
+    const seqB = Number(b.sequenceNumber) || 0;
+    return seqA - seqB;
+  });
+}
+
 // Helper generators for fallback mock plays based on sport
 function generateSportPlay(match, index) {
   const sport = (match.sport || 'soccer').toLowerCase();
@@ -288,7 +298,7 @@ async function processEvents() {
         let plays = summary.plays || [];
         
         // Chronological order (oldest to newest)
-        plays = [...plays].reverse();
+        plays = sortPlaysChronologically(plays);
         
         console.log(`[Worker] Processing ${plays.length} real live plays immediately...`);
         for (const play of plays) {
@@ -305,7 +315,7 @@ async function processEvents() {
             console.log(`[Worker] Match ${ev.id} has no ESPN play log. Creating mock events.`);
             plays = Array.from({ length: 50 }, (_, i) => generateSportPlay(ev, i));
           } else {
-            plays = [...plays].reverse();
+            plays = sortPlaysChronologically(plays);
           }
 
           simulationStates.set(ev.id, {
