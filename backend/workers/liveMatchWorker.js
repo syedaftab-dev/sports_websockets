@@ -251,8 +251,17 @@ async function processEvents() {
     const isMockFallback = liveMatches.length === 0;
     if (isMockFallback) {
       console.log("ℹ️ No active live matches. Activating Simulation mode for scheduled/finished games...");
-      // Select first 3 matches
-      liveMatches = rawEvents.slice(0, 3).map(m => ({ ...m, status: 'live', isSimulated: true }));
+      // Select first 3 matches, but filter out those that are already marked as finished in the DB
+      const candidates = rawEvents.slice(0, 3);
+      const filteredLiveMatches = [];
+      for (const m of candidates) {
+        const [existing] = await db.select({ status: matches.status }).from(matches).where(eq(matches.id, m.id)).limit(1);
+        if (existing && existing.status === 'finished') {
+          continue;
+        }
+        filteredLiveMatches.push({ ...m, status: 'live', isSimulated: true });
+      }
+      liveMatches = filteredLiveMatches;
     }
 
     // Set header bypass for worker requests
@@ -353,8 +362,22 @@ async function processEvents() {
         } else {
           // Simulation finished!
           ev.status = 'finished';
+          ev.homeScore = String(state.homeScore);
+          ev.awayScore = String(state.awayScore);
           await upsertMatch(ev);
-          console.log(`🏁 Match ${ev.homeTeam} vs ${ev.awayTeam} simulation complete.`);
+
+          try {
+            await axios.patch(`${API_URL}/matches/${ev.id}/score`, {
+              homeScore: ev.homeScore,
+              awayScore: ev.awayScore,
+            }, {
+              headers: { 'x-trusted-worker': 'true' }
+            });
+          } catch (err) {
+            console.error(`Failed to patch final scores for match ${ev.id}:`, err.message);
+          }
+
+          console.log(`🏁 Match ${ev.homeTeam} vs ${ev.awayTeam} simulation complete. Final score: ${ev.homeScore}-${ev.awayScore}`);
           simulationStates.delete(ev.id);
         }
       }
